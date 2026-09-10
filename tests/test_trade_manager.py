@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from src.config import Settings
 from src.logs import LogBuffer
-from src.models import AccountSnapshot, PositionSnapshot, Tick
+from src.models import AccountSnapshot, PendingSnapshot, PositionSnapshot, Tick
 from src.state import ActiveSignalState
 from src.trade_manager import (
     TradeManager,
@@ -103,6 +103,48 @@ def test_does_not_move_sl_before_tp1():
     assert mt5.modifies == []
 
 
+def test_cancels_pendings_when_tp1_hits_without_fill():
+    runtime, active, mt5 = _runtime_after_tp1(
+        modify_ok=True,
+        include_positions=False,
+        pendings=_three_pendings(),
+        bid=4388.2,
+    )
+    removed: list[str] = []
+    runtime.state.remove_active = lambda mid: removed.append(mid)
+    TradeManager(runtime).tick()
+    assert mt5.cancels == [101, 102, 103]
+    assert mt5.modifies == []
+    assert removed == ["abc12345"]
+
+
+def test_does_not_cancel_pendings_before_tp1():
+    runtime, _active, mt5 = _runtime_after_tp1(
+        modify_ok=True,
+        include_positions=False,
+        pendings=_three_pendings(),
+        bid=4385,
+    )
+    TradeManager(runtime).tick()
+    assert mt5.cancels == []
+    assert mt5.modifies == []
+
+
+def test_tp1_cancels_unfilled_legs_and_protects_filled():
+    runtime, active, mt5 = _runtime_after_tp1(
+        modify_ok=True,
+        still_has_tp1=True,
+        pendings=_three_pendings()[1:],
+        bid=4388.2,
+    )
+    mt5._positions = [pos for pos in mt5._positions if pos.ticket == 101]
+    TradeManager(runtime).tick()
+    assert mt5.cancels == [102, 103]
+    assert [call["ticket"] for call in mt5.modifies] == [101]
+    assert [call["sl"] for call in mt5.modifies] == [4384.8]
+    assert active.be_done is True
+
+
 def test_channel_manage_closes_l1_and_moves_rest_sl_to_entry():
     runtime, active, mt5 = _runtime_after_tp1(modify_ok=True, still_has_tp1=True, bid=4388.2)
     report = TradeManager(runtime).apply_channel_manage(_manage_cmd())
@@ -156,6 +198,8 @@ def _runtime_after_tp1(
     tickets: list[int] | None = None,
     still_has_tp1: bool = False,
     bid: float = 4388.2,
+    include_positions: bool = True,
+    pendings: list[PendingSnapshot] | None = None,
 ):
     settings = Settings(dry_run=False, be_profit_pips=8.0, pip_size=0.1)
     active = ActiveSignalState(
@@ -171,50 +215,57 @@ def _runtime_after_tp1(
         source="telegram",
     )
     positions = []
-    if still_has_tp1:
-        positions.append(
-            PositionSnapshot(
-                ticket=101,
-                symbol="XAUUSD",
-                side="BUY",
-                volume=0.01,
-                price_open=4384,
-                sl=4376,
-                tp=4388,
-                profit=1.0,
-                comment="p|abc12345|1",
-                magic=settings.magic,
+    if include_positions:
+        if still_has_tp1:
+            positions.append(
+                PositionSnapshot(
+                    ticket=101,
+                    symbol="XAUUSD",
+                    side="BUY",
+                    volume=0.01,
+                    price_open=4384,
+                    sl=4376,
+                    tp=4388,
+                    profit=1.0,
+                    comment="p|abc12345|1",
+                    magic=settings.magic,
+                )
             )
+        positions.extend(
+            [
+                PositionSnapshot(
+                    ticket=102,
+                    symbol="XAUUSD",
+                    side="BUY",
+                    volume=0.01,
+                    price_open=4384,
+                    sl=4376,
+                    tp=4392,
+                    profit=4.0,
+                    comment=comments[0] if comments else "",
+                    magic=settings.magic,
+                ),
+                PositionSnapshot(
+                    ticket=103,
+                    symbol="XAUUSD",
+                    side="BUY",
+                    volume=0.01,
+                    price_open=4384,
+                    sl=4376,
+                    tp=4400,
+                    profit=4.0,
+                    comment=comments[1] if len(comments) > 1 else "",
+                    magic=settings.magic,
+                ),
+            ]
         )
-    positions.extend(
-        [
-            PositionSnapshot(
-                ticket=102,
-                symbol="XAUUSD",
-                side="BUY",
-                volume=0.01,
-                price_open=4384,
-                sl=4376,
-                tp=4392,
-                profit=4.0,
-                comment=comments[0] if comments else "",
-                magic=settings.magic,
-            ),
-            PositionSnapshot(
-                ticket=103,
-                symbol="XAUUSD",
-                side="BUY",
-                volume=0.01,
-                price_open=4384,
-                sl=4376,
-                tp=4400,
-                profit=4.0,
-                comment=comments[1] if len(comments) > 1 else "",
-                magic=settings.magic,
-            ),
-        ]
+    mt5 = _FakeMT5(
+        settings,
+        positions,
+        modify_ok=modify_ok,
+        bid=bid,
+        pendings=pendings or [],
     )
-    mt5 = _FakeMT5(settings, positions, modify_ok=modify_ok, bid=bid)
     state = SimpleNamespace(
         list_actives=lambda: [active],
         remove_active=lambda _mid: None,
@@ -229,6 +280,24 @@ def _runtime_after_tp1(
     return runtime, active, mt5
 
 
+def _three_pendings() -> list[PendingSnapshot]:
+    tps = (4388, 4392, 4400)
+    return [
+        PendingSnapshot(
+            ticket=100 + leg,
+            symbol="XAUUSD",
+            kind="BUY_LIMIT",
+            volume=0.01,
+            price=4384,
+            sl=4376,
+            tp=tp,
+            comment=f"p|abc12345|{leg}",
+            magic=260907,
+        )
+        for leg, tp in enumerate(tps, start=1)
+    ]
+
+
 class _FakeMT5:
     def __init__(
         self,
@@ -236,13 +305,16 @@ class _FakeMT5:
         positions: list[PositionSnapshot],
         modify_ok: bool,
         bid: float = 4388.2,
+        pendings: list[PendingSnapshot] | None = None,
     ) -> None:
         self.settings = settings
         self._positions = positions
+        self._pendings = list(pendings or [])
         self.modify_ok = modify_ok
         self.bid = bid
         self.modifies: list[dict] = []
         self.closes: list[int] = []
+        self.cancels: list[int] = []
 
     def account(self) -> AccountSnapshot:
         return AccountSnapshot(connected=True, is_demo=True, trade_mode="demo")
@@ -254,7 +326,7 @@ class _FakeMT5:
         return list(self._positions)
 
     def pendings(self, _symbol: str, _magic: int) -> list:
-        return []
+        return list(self._pendings)
 
     def stop_distance(self, _symbol: str) -> float:
         return 0.02
@@ -271,4 +343,6 @@ class _FakeMT5:
         return {"ok": True, "retcode": 10009, "hint": ""}
 
     def cancel_pending(self, ticket: int) -> dict:
+        self.cancels.append(ticket)
+        self._pendings = [pend for pend in self._pendings if pend.ticket != ticket]
         return {"ok": True, "retcode": 10009, "ticket": ticket}

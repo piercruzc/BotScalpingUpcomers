@@ -43,16 +43,26 @@ class TradeManager:
                 runtime.logs.info(f"Señal {active.token} cerrada")
                 continue
             tp1 = tp1_reached(active, positions, market, runtime, settings)
+            l1_gone = not any(position_leg(active, item) == 1 for item in positions + pendings)
+            if pendings and (tp1 or l1_gone):
+                leftover = self._cancel_signal_pendings(active, pendings, settings, account)
+                if not positions and not leftover:
+                    runtime.state.remove_active(active.message_id)
+                    runtime.logs.info(
+                        f"Señal {active.token}: TP1 sin fill, cancelé las pendientes"
+                    )
+                    continue
+                pendings = leftover
             needs_be = not active.be_done or _sl_still_at_original(active, positions, settings)
-            if needs_be and tp1:
-                self._move_to_break_even(active, positions, pendings, market, settings, account)
+            if needs_be and tp1 and positions:
+                self._move_to_break_even(active, positions, [], market, settings, account)
             if (
                 active.be_done
                 and not active.tp2_done
                 and active.tp2
                 and tp2_reached(active, positions, market)
             ):
-                self._lock_at_tp1(active, positions, pendings, market, settings, account)
+                self._lock_at_tp1(active, positions, [], market, settings, account)
             if settings.trail_enabled and active.tp2_done:
                 self._trail(active, positions, market, settings, account)
 
@@ -164,6 +174,35 @@ class TradeManager:
         if result.get("ok"):
             self.runtime.logs.info(f"Cancelo primera pending L1 {pend.ticket}")
         return {"action": "cancel_l1", **result}
+
+    def _cancel_signal_pendings(
+        self,
+        active: ActiveSignalState,
+        pendings: list[PendingSnapshot],
+        settings,
+        account,
+    ) -> list[PendingSnapshot]:
+        if not _can_manage(settings, account, self.runtime, "cancel pendientes"):
+            return list(pendings)
+        leftover: list[PendingSnapshot] = []
+        for pend in pendings:
+            try:
+                result = self.runtime.mt5.cancel_pending(pend.ticket)
+            except Exception as exc:  # noqa: BLE001
+                self.runtime.logs.error(f"No pude cancelar pending {pend.ticket}: {exc}")
+                leftover.append(pend)
+                continue
+            if result.get("ok"):
+                self.runtime.logs.info(
+                    f"TP1: cancelo pending {pend.ticket} de la señal {active.token}"
+                )
+            else:
+                leftover.append(pend)
+                self.runtime.logs.error(
+                    f"Cancel pending {pend.ticket} retcode={result.get('retcode')} "
+                    f"{result.get('hint') or result.get('comment')}"
+                )
+        return leftover
 
     def _sl_to_entry(
         self,
