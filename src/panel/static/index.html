@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fondeo Scalp Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body data-mode="demo">
+  <aside class="rail">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">FS</div>
+      <div>
+        <p class="eyebrow">Prop · XAUUSD</p>
+        <h1>Fondeo Scalp</h1>
+      </div>
+    </div>
+
+    <div class="rail-block">
+      <span class="label">Modo de operación</span>
+      <div class="mode-switch" id="modeSwitch">
+        <button type="button" data-mode="demo" class="active">Demo</button>
+        <button type="button" data-mode="real">Real</button>
+      </div>
+      <label class="check">
+        <input type="checkbox" id="dryRun" />
+        Simulación (no envía órdenes)
+      </label>
+    </div>
+
+    <div class="leds">
+      <div><i id="ledMt5"></i> MetaTrader</div>
+      <div><i id="ledTg"></i> Telegram</div>
+      <div><i id="ledReady"></i> Listo para enviar</div>
+    </div>
+
+    <p class="rail-foot">Escritorio de cuenta de fondeo. No es el panel de Vantage.</p>
+  </aside>
+
+  <main class="workspace">
+    <header class="mast">
+      <div>
+        <p class="mast-kicker"><span id="clock">--:--:--</span> · desk fondeo</p>
+        <h2 class="mast-title">Control de scalping</h2>
+      </div>
+      <div class="banner hidden" id="realBanner">Modo Real activo · las órdenes solo salen del canal de Telegram</div>
+    </header>
+
+    <section class="kpis" id="statusGrid">
+      <article class="kpi" data-kpi="mt5">
+        <span class="kpi-label">Cuenta MT5</span>
+        <p class="kpi-value" id="accountLine">Sin conexión</p>
+        <p class="muted" id="alignLine"></p>
+      </article>
+      <article class="kpi" data-kpi="px">
+        <span class="kpi-label">Precio vivo</span>
+        <p class="kpi-value" id="tickLine">—</p>
+        <p class="muted" id="spreadLine"></p>
+      </article>
+      <article class="kpi" data-kpi="lot">
+        <span class="kpi-label">Exposición</span>
+        <p class="kpi-value" id="lotLine">0.01</p>
+        <p class="muted">Tres entradas, mismo lote</p>
+      </article>
+      <article class="kpi" data-kpi="tg">
+        <span class="kpi-label">Canal</span>
+        <p class="kpi-value" id="tgLine">Sin conexión</p>
+        <p class="muted" id="tgDetail"></p>
+      </article>
+    </section>
+
+    <div class="work-grid">
+      <section class="card">
+        <header class="card-head">
+          <h2>Parámetros</h2>
+          <span class="chip">config.yaml</span>
+        </header>
+        <form id="paramsForm" class="form-stack">
+          <fieldset>
+            <legend>Mercado</legend>
+            <div class="form-grid">
+              <label>Lotaje (cada entrada)
+                <input name="lot_size" type="number" step="0.01" min="0.01" />
+              </label>
+              <label>Símbolo
+                <input name="symbol" type="text" />
+              </label>
+              <label>Tamaño de pip
+                <input name="pip_size" type="number" step="0.01" />
+              </label>
+              <label>Spread máx. (pips)
+                <input name="max_spread_pips" type="number" step="1" />
+              </label>
+              <label>Deviation
+                <input name="deviation_points" type="number" step="1" />
+              </label>
+              <label>Señales a la vez
+                <input name="max_concurrent_signals" type="number" step="1" min="1" />
+              </label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Entrada</legend>
+            <div class="form-grid">
+              <label>Tolerancia entrada
+                <input name="entry_tolerance" type="number" step="0.01" />
+              </label>
+              <label>Cerca de entrada (pips)
+                <input name="near_entry_pips" type="number" step="1" />
+              </label>
+              <label>Buffer no perseguir
+                <input name="chase_buffer_pips" type="number" step="1" />
+              </label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Gestión</legend>
+            <div class="form-grid">
+              <label>Colchón TP1 lock (pips)
+                <input name="be_cushion_pips" type="number" step="1" />
+              </label>
+              <label>BE ganancia mín. (pips)
+                <input name="be_profit_pips" type="number" step="1" min="0" />
+              </label>
+              <label>Trail % (TP4)
+                <input name="trail_percent" type="number" step="0.1" min="0" />
+              </label>
+              <label>Trail start (pips)
+                <input name="trail_start_pips" type="number" step="1" />
+              </label>
+              <label>Trail distance (pips)
+                <input name="trail_distance_pips" type="number" step="1" />
+              </label>
+            </div>
+          </fieldset>
+          <label class="check">
+            <input name="trail_enabled" type="checkbox" />
+            Activar trail TP4
+          </label>
+          <label class="check" id="telegramRow">
+            <input name="telegram_enabled" type="checkbox" />
+            Leer canal Telegram
+          </label>
+          <button type="submit" class="primary">Guardar parámetros</button>
+        </form>
+      </section>
+
+      <section class="card" id="signalCard">
+        <header class="card-head">
+          <h2>Inyectar señal</h2>
+          <span class="pill">solo demo</span>
+        </header>
+        <p class="muted" id="signalHint">Pega el texto del canal, previsualiza las 3 entradas y ejecuta en la cuenta demo.</p>
+        <textarea id="signalText" rows="12" placeholder="📌BUY : XAUUSD “SCALP”&#10;FIRST ENTRY : 4411&#10;SECOND ENTRY : 4407&#10;..."></textarea>
+        <div class="actions">
+          <button type="button" id="previewBtn">Previsualizar</button>
+          <button type="button" id="executeBtn" class="primary">Ejecutar en demo</button>
+        </div>
+        <div id="planBox" class="plan"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <header class="card-head">
+        <h2>Libro de órdenes</h2>
+        <span class="chip">magic 260907</span>
+      </header>
+      <div id="books" class="books"><div class="muted">Sin operaciones del bot</div></div>
+    </section>
+
+    <section class="card log-card">
+      <header class="card-head">
+        <h2>Actividad</h2>
+        <span class="chip">en vivo</span>
+      </header>
+      <ul id="logList" class="log"><li>Esperando actividad…</li></ul>
+    </section>
+  </main>
+
+  <dialog id="realDialog">
+    <form method="dialog" id="realForm">
+      <p class="dialog-kicker">Confirmación</p>
+      <h2>Activar modo Real</h2>
+      <p>El panel sigue abierto. En Real no se pegan señales: solo el canal de Telegram. Lotaje y parámetros se siguen cambiando aquí. En una cuenta de fondeo esto suele ser el modo correcto.</p>
+      <p>Escribe <strong>REAL</strong> para confirmar.</p>
+      <input id="realConfirm" type="text" autocomplete="off" />
+      <div class="actions">
+        <button value="cancel">Cancelar</button>
+        <button value="ok" class="danger">Activar Real</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
