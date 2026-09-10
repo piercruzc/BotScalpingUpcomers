@@ -322,9 +322,16 @@ class TradeManager:
             return
         if not _can_manage(settings, account, self.runtime, "trail"):
             return
+        runners = [
+            pos
+            for pos in positions
+            if comment_leg(pos.comment) == 4 or float(pos.tp or 0) <= 0
+        ]
+        if not runners:
+            runners = list(positions)
         floor = sl_lock_tp1(active.direction, active.tp1, settings.be_cushion_pips * settings.pip_size)
         min_dist = self.runtime.mt5.stop_distance(settings.symbol)
-        for pos in positions:
+        for pos in runners:
             new_sl = trail_stop(
                 active.direction,
                 pos.price_open,
@@ -499,7 +506,7 @@ def tp1_reached(
         return True
     if _has_leg(1, positions, active):
         return False
-    if _has_leg(2, positions, active) or _has_leg(3, positions, active):
+    if _has_leg(2, positions, active) or _has_leg(3, positions, active) or _has_leg(4, positions, active):
         return True
     tickets = [ticket for ticket in (active.tickets or []) if ticket]
     if tickets:

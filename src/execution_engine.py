@@ -24,7 +24,9 @@ class ExecutionEngine:
 
         entry = choose_best_entry(signal, tick, settings)
 
-        tps = (signal.tp1, signal.tp2, signal.tp3)
+        tps: list[float | None] = [signal.tp1, signal.tp2, signal.tp3]
+        if settings.trail_enabled:
+            tps.append(None)
         orders = [
             _build_leg(signal, tick, settings, leg, entry, tp)
             for leg, tp in enumerate(tps, start=1)
@@ -33,7 +35,7 @@ class ExecutionEngine:
             return PlanResult(
                 signal=signal,
                 orders=orders,
-                rejected="Ninguna de las 3 entradas es válida con el precio actual.",
+                rejected=f"Ninguna de las {len(orders)} entradas es válida con el precio actual.",
             )
         return PlanResult(signal=signal, orders=orders)
 
@@ -72,7 +74,7 @@ def _build_leg(
     settings: Settings,
     leg: int,
     entry: float,
-    tp: float,
+    tp: float | None,
 ) -> PlannedOrder:
     volume = float(settings.lot_size)
     rr_error = _invalid_rr(signal, entry, tp)
@@ -107,16 +109,16 @@ def _already_past_tp1(signal: Signal, tick: Tick) -> bool:
     return tick.ask <= signal.tp1
 
 
-def _invalid_rr(signal: Signal, entry: float, tp: float) -> str | None:
+def _invalid_rr(signal: Signal, entry: float, tp: float | None) -> str | None:
     if signal.direction == "BUY":
         if not (signal.sl < entry):
             return f"BUY inválido: SL {signal.sl} debe estar bajo la entrada {entry}"
-        if not (entry < tp):
+        if tp is not None and not (entry < tp):
             return f"BUY inválido: entrada {entry} debe estar bajo TP {tp}"
         return None
     if not (signal.sl > entry):
         return f"SELL inválido: SL {signal.sl} debe estar sobre la entrada {entry}"
-    if not (entry > tp):
+    if tp is not None and not (entry > tp):
         return f"SELL inválido: entrada {entry} debe estar sobre TP {tp}"
     return None
 

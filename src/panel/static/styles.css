@@ -204,7 +204,8 @@ h2 { margin: 0; font-size: 15px; font-weight: 600; }
   border: 1px solid var(--line);
   color: var(--muted);
 }
-.pill { border-color: var(--mint); color: var(--mint); }
+.card-head-tools { display: flex; gap: 8px; align-items: center; }
+.chip.warn { border-color: var(--warn); color: var(--warn); }
 
 .form-stack { display: grid; gap: 16px; }
 fieldset {

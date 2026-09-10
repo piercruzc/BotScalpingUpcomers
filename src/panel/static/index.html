@@ -63,7 +63,7 @@
       <article class="kpi" data-kpi="lot">
         <span class="kpi-label">Exposición</span>
         <p class="kpi-value" id="lotLine">0.01</p>
-        <p class="muted">Tres entradas, mismo lote</p>
+        <p class="muted" id="lotHint">Tres entradas, mismo lote</p>
       </article>
       <article class="kpi" data-kpi="tg">
         <span class="kpi-label">Canal</span>
@@ -76,7 +76,10 @@
       <section class="card">
         <header class="card-head">
           <h2>Parámetros</h2>
-          <span class="chip">config.yaml</span>
+          <div class="card-head-tools">
+            <span class="chip warn hidden" id="paramsDirty">Sin guardar</span>
+            <span class="chip">config.yaml</span>
+          </div>
         </header>
         <form id="paramsForm" class="form-stack">
           <fieldset>
@@ -138,7 +141,7 @@
           </fieldset>
           <label class="check">
             <input name="trail_enabled" type="checkbox" />
-            Activar trail TP4
+            Activar trail TP4 (abre 4 posiciones)
           </label>
           <label class="check" id="telegramRow">
             <input name="telegram_enabled" type="checkbox" />

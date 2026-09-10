@@ -139,7 +139,7 @@ class BotRuntime:
             placed = [_order_dict(order) | {"status": "dry-run"} for order in plan.accepted_orders]
             entry = plan.accepted_orders[0].entry if plan.accepted_orders else "?"
             self.logs.info(
-                f"Dry-run {signal.direction} @ {entry}: {len(placed)} órdenes TP1/TP2/TP3 SL {signal.sl}"
+                f"Dry-run {signal.direction} @ {entry}: {len(placed)} órdenes SL {signal.sl}"
             )
             return ExecutionReport(
                 dry_run=True, source=source, rejected=None, placed=placed, skipped=skipped
@@ -249,26 +249,26 @@ def _tickets_for_signal(
     settings: Settings,
     token: str,
 ) -> list[int]:
-    tickets = [0, 0, 0]
+    tickets = [0, 0, 0, 0]
     for item in placed:
         if not item.get("ok"):
             continue
         leg = int(item.get("leg") or 0)
         order_id = int(item.get("order") or 0)
-        if 1 <= leg <= 3 and order_id:
+        if 1 <= leg <= 4 and order_id:
             tickets[leg - 1] = order_id
     try:
         for pos in runtime.mt5.positions(settings.symbol, settings.magic):
             if not comment_belongs(pos.comment, token):
                 continue
             leg = comment_leg(pos.comment)
-            if leg and 1 <= leg <= 3:
+            if leg and 1 <= leg <= 4:
                 tickets[leg - 1] = pos.ticket
         for pend in runtime.mt5.pendings(settings.symbol, settings.magic):
             if not comment_belongs(pend.comment, token):
                 continue
             leg = comment_leg(pend.comment)
-            if leg and 1 <= leg <= 3:
+            if leg and 1 <= leg <= 4:
                 tickets[leg - 1] = pend.ticket
     except Exception:  # noqa: BLE001
         pass

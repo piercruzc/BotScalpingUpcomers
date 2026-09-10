@@ -43,6 +43,17 @@ def test_same_lot_and_same_entry_three_tps():
     assert [order.sl for order in plan.accepted_orders] == [4403, 4403, 4403]
 
 
+def test_trail_opens_fourth_leg_without_tp():
+    settings = Settings(lot_size=0.02, entry_tolerance=0.2, trail_enabled=True)
+    plan = ExecutionEngine().plan(_buy(), Tick(bid=4410.8, ask=4411.0), settings)
+    assert plan.rejected is None
+    assert len(plan.accepted_orders) == 4
+    assert [order.volume for order in plan.accepted_orders] == [0.02, 0.02, 0.02, 0.02]
+    assert [order.tp for order in plan.accepted_orders] == [4415, 4420, 4430, None]
+    assert [order.leg for order in plan.accepted_orders] == [1, 2, 3, 4]
+    assert all(order.entry == 4411 for order in plan.accepted_orders)
+
+
 def test_sell_near_first_uses_first_with_tp1_tp2_tp3():
     settings = Settings(entry_tolerance=0.2, near_entry_pips=20)
     plan = ExecutionEngine().plan(_sell_piply(), Tick(bid=4384.1, ask=4384.3), settings)

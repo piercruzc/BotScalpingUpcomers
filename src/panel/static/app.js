@@ -11,6 +11,21 @@ const dialog = $("#realDialog");
 const realConfirm = $("#realConfirm");
 
 let state = { operating_mode: "demo" };
+let formDirty = false;
+
+function markFormDirty() {
+  formDirty = true;
+  $("#paramsDirty")?.classList.remove("hidden");
+}
+
+function clearFormDirty() {
+  formDirty = false;
+  $("#paramsDirty")?.classList.add("hidden");
+}
+
+function legsCount(settings) {
+  return settings?.trail_enabled ? 4 : 3;
+}
 
 async function api(path, options) {
   const res = await fetch(path, {
@@ -25,6 +40,7 @@ async function api(path, options) {
 }
 
 function fillForm(settings) {
+  if (formDirty || (form && form.contains(document.activeElement))) return;
   for (const [key, value] of Object.entries(settings)) {
     const field = form.elements[key];
     if (!field) continue;
@@ -32,7 +48,17 @@ function fillForm(settings) {
     else field.value = value;
   }
   dryRun.checked = Boolean(settings.dry_run);
-  $("#lotLine").textContent = `${settings.lot_size} × 3`;
+}
+
+function updateLotKpi(settings) {
+  const legs = legsCount(settings);
+  $("#lotLine").textContent = `${settings.lot_size} × ${legs}`;
+  const hint = $("#lotHint");
+  if (hint) {
+    hint.textContent = legs === 4
+      ? "Cuatro entradas (trail TP4), mismo lote"
+      : "Tres entradas, mismo lote";
+  }
 }
 
 function setModeUi(mode, settings) {
@@ -46,8 +72,9 @@ function setModeUi(mode, settings) {
   if (!isDemo) {
     signalHint.textContent = "En Real las órdenes solo salen del canal de Telegram.";
   } else {
-    signalHint.textContent = "Pega el texto del canal, previsualiza las 3 entradas y ejecuta en la cuenta demo.";
+    signalHint.textContent = "Pega el texto del canal, previsualiza las entradas y ejecuta en la cuenta demo.";
   }
+  if (formDirty) return;
   if (settings?.telegram_forced) {
     form.elements.telegram_enabled.checked = true;
     form.elements.telegram_enabled.disabled = true;
@@ -87,6 +114,7 @@ function renderStatus(data) {
   setLed("#ledMt5", acc.connected);
   setLed("#ledTg", tg.connected);
   setLed("#ledReady", data.can_trade);
+  updateLotKpi(data.settings);
 
   const rows = [
     ...(data.actives || []).map((a) => (
@@ -193,6 +221,7 @@ form.addEventListener("submit", async (event) => {
     dry_run: dryRun.checked,
   };
   await api("/api/config", { method: "PUT", body: JSON.stringify(payload) });
+  clearFormDirty();
   await refresh();
 });
 
@@ -229,5 +258,7 @@ $("#executeBtn").addEventListener("click", async () => {
 
 tickClock();
 setInterval(tickClock, 1000);
+form.addEventListener("input", markFormDirty);
+form.addEventListener("change", markFormDirty);
 refresh();
 setInterval(refresh, 2000);
